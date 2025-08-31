@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>시계는 와치 시계는 와치</title>
+    <style>
+      body {
+        margin: 0;
+        background: radial-gradient(
+          ellipse at bottom,
+          #0b0c1c 0%,
+          #000000 100%
+        );
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+        color: white;
+      }
+      canvas {
+        display: block;
+      }
+      #instruction {
+        position: absolute;
+        bottom: 60px;
+        width: 100%;
+        text-align: center;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.7);
+        z-index: 10;
+        pointer-events: none;
+      }
+      #timezoneButtons {
+        position: absolute;
+        bottom: 20px;
+        width: 100%;
+        text-align: center;
+        z-index: 10;
+      }
+      #timezoneButtons button {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid white;
+        color: white;
+        margin: 0 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 14px;
+        border-radius: 5px;
+        transition: 0.2s;
+      }
+      #timezoneButtons button:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      #timezoneButtons button.active {
+        background: rgba(255, 255, 255, 0.6);
+        color: black;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="clock"></canvas>
+    <div id="instruction">⭐︎ 커서를 가운데로 옮겨보세요 ⭐︎</div>
+    <div id="timezoneButtons">
+      <button data-zone="Asia/Seoul">Seoul</button>
+      <button data-zone="America/New_York">New York</button>
+      <button data-zone="Europe/London">London</button>
+      <button data-zone="Asia/Tokyo">Tokyo</button>
+    </div>
+    <script>
+      const canvas = document.getElementById("clock");
+      const ctx = canvas.getContext("2d");
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const particles = [];
+      const particleSize = 2;
+      const density = 6;
+      let mouse = { x: null, y: null };
+      let textBox = { x: 0, y: 0, width: 0, height: 0 };
+      let mouseInTextArea = false;
+      let prevMouseInTextArea = false;
+      let currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      window.addEventListener("mousemove", (e) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+      });
+      window.addEventListener("mouseleave", () => {
+        mouse.x = null;
+        mouse.y = null;
+      });
+
+      class Particle {
+        constructor(x, y) {
+          this.x = Math.random() * canvas.width;
+          this.y = Math.random() * canvas.height;
+          this.destX = x;
+          this.destY = y;
+          this.vx = (Math.random() - 0.5) * 2;
+          this.vy = (Math.random() - 0.5) * 2;
+          this.color = "white";
+        }
+
+        update() {
+          this.vx += (Math.random() - 0.5) * 0.1;
+          this.vy += (Math.random() - 0.5) * 0.1;
+
+          if (mouseInTextArea) {
+            let force = 0.15;
+            this.x += (this.destX - this.x) * force + this.vx * 0.1;
+            this.y += (this.destY - this.y) * force + this.vy * 0.1;
+          } else {
+            this.x += this.vx;
+            this.y += this.vy;
+          }
+
+          if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+          if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+
+          this.vx *= 0.98;
+          this.vy *= 0.98;
+        }
+
+        draw() {
+          ctx.fillStyle = this.color;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, particleSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function createParticlesForTime() {
+        const time = new Date();
+        const text = time.toLocaleTimeString("en-GB", {
+          hour12: false,
+          timeZone: currentTimeZone,
+        });
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = "150px Arial Black";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "white";
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+        const textWidth = ctx.measureText(text).width;
+        textBox = {
+          x: canvas.width / 2 - textWidth / 2,
+          y: canvas.height / 2 - 75,
+          width: textWidth,
+          height: 150,
+        };
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let idx = 0;
+        for (let y = 0; y < imageData.height; y += density) {
+          for (let x = 0; x < imageData.width; x += density) {
+            const index = (y * imageData.width + x) * 4;
+            if (imageData.data[index + 3] > 128) {
+              if (particles[idx]) {
+                particles[idx].destX = x;
+                particles[idx].destY = y;
+              } else {
+                particles.push(new Particle(x, y));
+              }
+              idx++;
+            }
+          }
+        }
+      }
+
+      function animate() {
+        mouseInTextArea =
+          mouse.x !== null &&
+          mouse.y !== null &&
+          mouse.x > textBox.x &&
+          mouse.x < textBox.x + textBox.width &&
+          mouse.y > textBox.y &&
+          mouse.y < textBox.y + textBox.height;
+
+        if (prevMouseInTextArea && !mouseInTextArea) {
+          for (let p of particles) {
+            p.vx += (Math.random() - 0.5) * 20;
+            p.vy += (Math.random() - 0.5) * 20;
+          }
+        }
+        prevMouseInTextArea = mouseInTextArea;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < particles.length; i++) {
+          particles[i].update();
+          particles[i].draw();
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      setInterval(createParticlesForTime, 1000);
+      createParticlesForTime();
+      animate();
+
+      const buttons = document.querySelectorAll("#timezoneButtons button");
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.classList.contains("active")) {
+            currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; // 기본 시간대로
+            btn.classList.remove("active");
+          } else {
+            currentTimeZone = btn.dataset.zone;
+            buttons.forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+          }
+          createParticlesForTime();
+        });
+      });
+    </script>
+  </body>
+</html>
